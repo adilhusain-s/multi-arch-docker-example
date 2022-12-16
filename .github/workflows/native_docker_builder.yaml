@@ -28,22 +28,19 @@ jobs:
           username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
       - name: configure ssh
         run: |
           ssh-keygen -t rsa -q -f "$HOME/.ssh/id_rsa" -N ""
           printenv  SSH_PRIVATE_KEY > ~/.ssh/id_rsa
           ssh-keyscan -H $VM_IP >~/.ssh/known_hosts
-          eval $(ssh-agent)
-          ssh-add 
+          eval $(ssh-agent) 
+          ssh-add
+          echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK  >> $GITHUB_ENV 
+          echo SSH_AGENT_PID=$SSH_AGENT_PID >> $GITHUB_ENV 
           ssh -T $PPC64LE_VM_IP arch
 
       - name: add native builder
         run: |
-          eval $(ssh-agent)
-          ssh-add 
           docker context create linux-ppc64le-context  --docker "host=ssh://$PPC64LE_VM_IP"
           docker buildx create --name amd64-ppc64le-builder  --platform linux/ppc64le linux-ppc64le-context
           docker buildx use amd64-ppc64le-builder
@@ -52,8 +49,6 @@ jobs:
 
       - name: Build multi-arch docker image
         run: |
-          eval $(ssh-agent)
-          ssh-add 
           docker buildx ls
           docker buildx build   --push --platform linux/ppc64le,linux/amd64 -t $IMG .
 
@@ -61,3 +56,12 @@ jobs:
         if: github.event_name == 'push'
         run: |
           docker manifest inspect $IMG | grep arch -i
+
+      - name: clean ppc64le native docker node
+        run: |
+          docker buildx prune -a -f
+          docker context use linux-ppc64le-context 
+          docker rm -f $(docker ps -aq)
+          docker rmi -f $(docker images -q)
+          docker system prune  -a -f --volumes 
+          eval $(ssh-agent -k)
