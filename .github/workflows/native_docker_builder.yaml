@@ -38,7 +38,6 @@ jobs:
           ssh-keyscan -H $VM_IP >~/.ssh/known_hosts
           eval $(ssh-agent)
           ssh-add 
-          ssh -T $PPC64LE_VM_IP grep name -i /etc/os-release
           ssh -T $PPC64LE_VM_IP arch
 
       - name: add native builder
@@ -46,10 +45,9 @@ jobs:
           eval $(ssh-agent)
           ssh-add 
           docker context create linux-ppc64le-context  --docker "host=ssh://$PPC64LE_VM_IP"
-          #docker context use linux-ppc64le-context 
-          #docker images
-          docker buildx create --name amd64-ppc64le-builder  --platform $ARCH  linux-ppc64le-context
+          docker buildx create --name amd64-ppc64le-builder  --platform linux/ppc64le linux-ppc64le-context
           docker buildx use amd64-ppc64le-builder
+          docker buildx create --append --name amd64-ppc64le-builder --platform linux/amd64 default 
           docker buildx inspect amd64-ppc64le-builder
 
       - name: Build multi-arch docker image
@@ -57,14 +55,9 @@ jobs:
           eval $(ssh-agent)
           ssh-add 
           docker buildx ls
-          docker buildx build  --load --platform linux/amd64 -t $IMG:amd64 .
-          docker buildx build --load --platform linux/ppc64le -t $IMG:ppc64le .
-          docker buildx build --load --platform linux/arm64 -t $IMG:arm64 .
+          docker buildx build   --push --platform linux/ppc64le,linux/amd64 -t $IMG .
 
       - name: list and inspect
         if: github.event_name == 'push'
         run: |
-          docker images | head
-          docker inspect $IMG:amd64 | grep arch -i 
-          docker inspect $IMG:ppc64le | grep arch -i
-          docker inspect $IMG:arm64 | grep arch -i
+          docker manifest inspect $IMG | grep arch -i
