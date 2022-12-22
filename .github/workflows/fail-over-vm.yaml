@@ -1,0 +1,89 @@
+name: fail over vm example
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_USER: adysh97
+  PPC64LE_VM_IP: ${{ secrets.PPC64LE_VM_IP }}
+  VM_IP: ${{ secrets.VM_IP }}
+  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  IMG: adysh97/fail_over_image
+  ARCH: linux/ppc64le,linux/amd64
+
+jobs:
+  build_multi_arch_imagenative:
+    runs-on: ubuntu-latest
+    outputs:
+      ssh_config_status: ${{ steps.ssh_configure.conclusion }}
+      native_builder_status: ${{ steps.native_builder.conclusion }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to DockerHub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ env.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: configure ssh
+        id: ssh_configure
+        run: |
+          ssh-keygen -t rsa -q -f "$HOME/.ssh/id_rsa" -N ""
+          printenv  SSH_PRIVATE_KEY > ~/.ssh/id_rsa
+          ssh-keyscan -H $VM_IP >~/.ssh/known_hosts
+          eval $(ssh-agent) 
+          ssh-add
+          echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK  >> $GITHUB_ENV 
+          echo SSH_AGENT_PID=$SSH_AGENT_PID >> $GITHUB_ENV 
+          ssh -T $PPC64LE_VM_IP arch
+
+      - name: add native ppc64le builder
+        id: native_builder
+        run: |
+          REPO_NAME=$(echo ${{github.repository}} | cut -f2 -d '/' | sed 's/"//g')
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          echo "SHA_SHORT=$SHA_SHORT" >> $GITHUB_ENV
+          AMD64_PPC64LE_BUILDER_NAME="amd64-ppc64le-${REPO_NAME}-${SHA_SHORT}"
+          echo $AMD64_PPC64LE_BUILDER_NAME
+          echo "AMD64_PPC64LE_BUILDER_NAME=$AMD64_PPC64LE_BUILDER_NAME" >> $GITHUB_ENV
+          docker context create linux-ppc64le-context  --docker "host=ssh://$PPC64LE_VM_IP"
+          docker buildx create --name $AMD64_PPC64LE_BUILDER_NAME --node $AMD64_PPC64LE_BUILDER_NAME --platform linux/ppc64le linux-ppc64le-context
+          docker buildx use $AMD64_PPC64LE_BUILDER_NAME
+          docker buildx create --append --name $AMD64_PPC64LE_BUILDER_NAME --platform linux/amd64 default 
+          docker buildx inspect $AMD64_PPC64LE_BUILDER_NAME
+
+      - name: Build multi-arch docker image
+        run: |
+          docker buildx ls
+          docker buildx build   --push --platform linux/ppc64le,linux/amd64 -t $IMG:${{ env.SHA_SHORT }} .
+
+      - name: list and inspect
+        if: github.event_name == 'push'
+        run: |
+          docker manifest inspect $IMG:${{ env.SHA_SHORT }} | grep arch -i
+
+      - name: clean ppc64le native docker node
+        run: |
+          docker buildx rm $AMD64_PPC64LE_BUILDER_NAME
+          docker buildx prune -a -f
+          eval $(ssh-agent -k)
+
+  build_amd64_docker_image:
+    needs: build_multi_arch_imagenative
+    if: ${{ failure() && ( needs.build_multi_arch_imagenative.outputs.ssh_config_status == 'failure' || needs.build_multi_arch_imagenative.outputs.native_builder_status == 'failure' )}}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          tags: ${{ env.IMG }}
