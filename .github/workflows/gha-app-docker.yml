@@ -19,6 +19,9 @@ jobs:
           sudo apt update -qqy 
           sudo apt install docker.io  make -qqy 
           sudo systemctl start docker 
+          sudo usermod -aG docker  ubuntu
+          sudo newgrp docker 
+
 
       - name: Login to DockerHub
         if: github.event_name == 'push'
