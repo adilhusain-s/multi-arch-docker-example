@@ -16,8 +16,9 @@ jobs:
 
       - name: install docker
         run: |
-          apt install docker -qqy 
-          systemctl start docker 
+          sudo apt update -qqy 
+          sudo apt install docker -qqy 
+          sudo systemctl start docker 
 
       - name: Login to DockerHub
         if: github.event_name == 'push'
