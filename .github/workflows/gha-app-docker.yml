@@ -1,0 +1,27 @@
+name: testing 
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_USER: adysh97
+
+jobs:
+  power docker example:
+    runs-on: ubuntu-latest-ppc64le
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to DockerHub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ env.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: list and inspect
+        if: github.event_name == 'push'
+        run: |
+            docker build .
