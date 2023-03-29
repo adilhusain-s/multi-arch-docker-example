@@ -23,13 +23,15 @@ jobs:
           sudo newgrp docker 
 
 
+
+          
+      - name: build docker image 
+        run: |
+          sudo docker build .
+
       - name: Login to DockerHub
         if: github.event_name == 'push'
         uses: docker/login-action@v2
         with:
           username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: build docker image 
-        run: |
-            docker build .
