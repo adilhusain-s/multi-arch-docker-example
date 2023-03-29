@@ -14,21 +14,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: install docker
-        run: |
-          sudo apt update -qqy 
-          sudo apt install docker.io  make -qqy 
-          sudo systemctl start docker 
-          sudo usermod -aG docker  ubuntu
-          newgrp docker 
-
-      - name: build docker image 
-        run: |
-          sudo docker build .
-
       - name: Login to DockerHub
         if: github.event_name == 'push'
         uses: docker/login-action@v2
         with:
           username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: build docker image 
+        run: |
+          docker build .
