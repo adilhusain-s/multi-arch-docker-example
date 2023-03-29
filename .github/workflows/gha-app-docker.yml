@@ -8,7 +8,7 @@ env:
   DOCKER_USER: adysh97
 
 jobs:
-  power docker example:
+  power-docker-example:
     runs-on: ubuntu-latest-ppc64le
     steps:
       - name: Checkout
