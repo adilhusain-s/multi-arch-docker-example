@@ -14,6 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: install docker
+        run: |
+          apt install docker -qqy 
+          systemctl start docker 
+
       - name: Login to DockerHub
         if: github.event_name == 'push'
         uses: docker/login-action@v2
@@ -21,7 +26,6 @@ jobs:
           username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: list and inspect
-        if: github.event_name == 'push'
+      - name: build docker image 
         run: |
             docker build .
